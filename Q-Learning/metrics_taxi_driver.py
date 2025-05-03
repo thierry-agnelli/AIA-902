@@ -4,9 +4,6 @@ import numpy as np
 from tqdm import tqdm
 
 
-seed = random.randint(0, 1000)
-np.random.seed(seed)
-
 def define_QTable(env):
     states = env.observation_space.n
     actions = env.action_space.n
@@ -28,15 +25,18 @@ def epsilon_greedy_policy(QTable, state, epsilon):
 def train(env, qtable, epsilon, max_epsilon, min_epsilon, learning_rate, discount_rate, decay_rate, max_episode, max_steps):
     win_count = 0
     
+    # episode = -1
+    # while(win_count < 100):
+    #     episode+=1
+
     for episode in tqdm(range(max_episode)):
-        
         state, _ = env.reset()
 
         for step in range(max_steps):
             action = epsilon_greedy_policy(qtable, state, epsilon)
             
             new_state, reward, done, _, _ = env.step(action)
-            
+
             qtable[state, action] = qtable[state, action] + learning_rate * (reward + discount_rate * np.max(qtable[new_state,:]) - qtable[state, action])
             
             # Mettre à jour l'état
@@ -45,10 +45,11 @@ def train(env, qtable, epsilon, max_epsilon, min_epsilon, learning_rate, discoun
             if done == True:
                 win_count+=1
                 break
-
+        
         epsilon = min_epsilon + (max_epsilon - min_epsilon)*np.exp(-decay_rate*episode)
 
-    print("nb win:", win_count)
+    return win_count/max_episode
+
 
 max_episode = 1000
 # max_episode = 10
@@ -65,36 +66,55 @@ decay_rate = 0.005
 epsilon = max_epsilon
 
 
-env = gym.make("Taxi-v3")
-demo_env = gym.make("Taxi-v3", render_mode="human")
-demo_env.reset()
+training_number = 250
 
-qtable = define_QTable(env)
+metrics = {
+    "rewards": np.array([]),
+    "win_rate": np.array([])
+}
 
-train(env, qtable, epsilon, max_epsilon, min_epsilon, learning_rate, discount_rate, decay_rate, max_episode, max_steps)
-env.close()
+for t in range(training_number):
+    seed = random.randint(0, 1000)
+    np.random.seed(seed)
 
-# watch trained agent
-state, _ = env.reset(seed=seed)
-done = False
-rewards = 0
+    env = gym.make("Taxi-v3")
+    env.reset()
 
-print(f"TRAINED AGENT")
+    rewards = []
+    win_count = []
 
-# env = gym.make("Taxi-v3", render_mode="human")
-state, _ = demo_env.reset(seed=seed)
+    qtable = define_QTable(env)
 
-for s in range(max_steps):
-    action = np.argmax(qtable[state,:])
-    new_state, reward, done, info, _ = demo_env.step(action)
-    rewards += reward
-    demo_env.render()
-    
-    state = new_state
-    # env.render()
-    if done == True:
-        print("JAYJAY")
-        print("score: ", rewards)
-        break
+    win_rate = train(env, qtable, epsilon, max_epsilon, min_epsilon, learning_rate, discount_rate, decay_rate, max_episode, max_steps)
+    metrics["win_rate"] = np.append(metrics["win_rate"], win_rate)
+    env.close()
+
+    done = False
+    total_reward = 0
+
+    # env = gym.make("Taxi-v3", render_mode="human")
+    state, _ = env.reset(seed=seed)
+
+    for s in range(max_steps):
+        action = np.argmax(qtable[state,:])
+        new_state, reward, done, info, _ = env.step(action)
+        total_reward += reward
+        # env.render()
+        
+        state = new_state
+
+        if done == True:
+            break
+
+
+    # watch trained agent
+    state, _ = env.reset(seed=seed)
+
+    print(t, "---> reward :", total_reward)
+    metrics["rewards"] = np.append(metrics["rewards"], total_reward)
+    # metrics["rewards"].append(total_reward)
+
+print(np.mean(metrics["rewards"]))
+print(np.mean(metrics["win_rate"]))
 
 env.close()
